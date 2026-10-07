@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Conda / virtual environments
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables / secrets
+.env
+*.env
+
+# VS Code
+.vscode/
+
+# Project data and uploaded clinical documents
+data/private/
+uploads/
+
+# Trained model files
+*.pkl
+*.joblib
+*.pt
+*.pth
+
+# Logs
+*.log
