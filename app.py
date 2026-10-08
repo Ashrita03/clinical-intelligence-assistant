@@ -8,6 +8,10 @@ import tempfile
 import streamlit as st
 
 from src.document_processor import process_clinical_pdf
+from src.ml_predictor import (
+    train_heart_disease_model,
+    predict_heart_disease,
+)
 
 
 # =========================================================
@@ -23,16 +27,28 @@ st.set_page_config(
 
 
 # =========================================================
+# ML MODEL
+# =========================================================
+
+@st.cache_resource
+def load_ml_model():
+    """
+    Train and cache the heart disease classification model.
+
+    Streamlit keeps the trained model in memory so that it
+    does not need to be retrained after every interaction.
+    """
+
+    return train_heart_disease_model()
+
+
+# =========================================================
 # AI SUBPROCESS PIPELINE
 # =========================================================
 
 def run_ai_pipeline(report_text, question):
     """
     Run the complete RAG + QA pipeline in an isolated process.
-
-    The Streamlit application does not load the embedding model
-    or FLAN-T5 directly. The AI worker handles those models in
-    separate child processes.
     """
 
     request_data = {
@@ -140,7 +156,6 @@ footer {
         #12b8ae,
         #2584ff
     );
-
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -150,7 +165,7 @@ footer {
     color: #536780;
     font-size: 1.15rem;
     line-height: 1.7;
-    max-width: 850px;
+    max-width: 900px;
 }
 
 .feature-row {
@@ -177,7 +192,6 @@ footer {
         #e8f3ff,
         #edf9ff
     );
-
     border: 1px solid #cfe5ff;
     padding: 18px 22px;
     border-radius: 16px;
@@ -236,22 +250,19 @@ footer {
 }
 
 
-/* AI QUESTION CARD */
+/* AI SECTION */
 
 .ai-section {
     margin-top: 38px;
     padding: 28px;
     border-radius: 22px;
-
     background:
         linear-gradient(
             135deg,
             rgba(255,255,255,0.94),
             rgba(240,249,255,0.94)
         );
-
     border: 1px solid #d5e9ff;
-
     box-shadow:
         0 12px 35px
         rgba(35, 80, 150, 0.09);
@@ -270,9 +281,6 @@ footer {
     margin-bottom: 4px;
 }
 
-
-/* AI ANSWER */
-
 .answer-card {
     background:
         linear-gradient(
@@ -280,7 +288,6 @@ footer {
             #edf9ff,
             #f3fbff
         );
-
     border-left: 5px solid #20a8e8;
     border-radius: 15px;
     padding: 20px 22px;
@@ -297,27 +304,88 @@ footer {
 }
 
 
+/* ML SECTION */
+
+.ml-section {
+    margin-top: 55px;
+    padding: 30px;
+    border-radius: 24px;
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255,255,255,0.96),
+            rgba(242,248,255,0.96)
+        );
+    border: 1px solid #d4e5fb;
+    box-shadow:
+        0 12px 40px
+        rgba(37, 79, 145, 0.09);
+}
+
+.ml-title {
+    color: #12265c;
+    font-size: 1.9rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.ml-description {
+    color: #687b94;
+    line-height: 1.65;
+}
+
+.ml-note {
+    background: #fff9e8;
+    border: 1px solid #f1dfa6;
+    border-radius: 14px;
+    padding: 16px 18px;
+    color: #75601c;
+    margin-top: 18px;
+    margin-bottom: 22px;
+    line-height: 1.55;
+}
+
+.prediction-card {
+    background:
+        linear-gradient(
+            135deg,
+            #eef9ff,
+            #f6fbff
+        );
+    border: 1px solid #cfe7fa;
+    border-radius: 18px;
+    padding: 22px;
+    margin-top: 20px;
+}
+
+.prediction-title {
+    color: #10245c;
+    font-weight: 800;
+    font-size: 1.15rem;
+    margin-bottom: 8px;
+}
+
+.prediction-text {
+    color: #536780;
+    line-height: 1.6;
+}
+
+
 /* FEATURE CARDS */
 
 .info-card {
     min-height: 175px;
-
     background:
         rgba(255, 255, 255, 0.88);
-
     border:
         1px solid
         rgba(100, 150, 220, 0.14);
-
     border-radius: 20px;
     padding: 23px;
-
     box-shadow:
         0 8px 30px
         rgba(37, 79, 145, 0.08);
-
     margin-top: 28px;
-
     transition:
         transform 0.2s ease,
         box-shadow 0.2s ease;
@@ -325,7 +393,6 @@ footer {
 
 .info-card:hover {
     transform: translateY(-4px);
-
     box-shadow:
         0 14px 35px
         rgba(37, 79, 145, 0.13);
@@ -389,8 +456,8 @@ st.markdown(
 
 <div class="hero-subtitle">
 Transform clinical laboratory reports into structured, understandable information.
-Extract laboratory values, analyze results, and ask questions using an AI-powered
-retrieval system grounded in your uploaded document.
+Extract laboratory values, ask grounded questions using retrieval-augmented AI,
+and explore a machine-learning classification demonstration.
 </div>
 
 <div class="feature-row">
@@ -404,11 +471,11 @@ retrieval system grounded in your uploaded document.
 </div>
 
 <div class="feature-badge">
-💬 Ask Questions with AI
+💬 RAG Question Answering
 </div>
 
 <div class="feature-badge">
-🔎 Evidence-Based Retrieval
+🫀 ML Classification
 </div>
 
 </div>
@@ -445,7 +512,8 @@ st.markdown(
 </div>
 
 <div class="upload-subtitle">
-Choose a PDF clinical laboratory report to get started.
+Choose a PDF clinical laboratory report to extract structured
+results and ask questions about the document.
 </div>
 """,
     unsafe_allow_html=True,
@@ -473,10 +541,6 @@ if uploaded_file is not None:
 
     try:
 
-        # -------------------------------------------------
-        # SAVE PDF TEMPORARILY
-        # -------------------------------------------------
-
         with tempfile.NamedTemporaryFile(
             delete=False,
             suffix=".pdf"
@@ -489,17 +553,13 @@ if uploaded_file is not None:
             temp_file_path = temp_file.name
 
 
-        # -------------------------------------------------
-        # EXTRACT REPORT
-        # -------------------------------------------------
-
         extracted_text, lab_dataframe = process_clinical_pdf(
             temp_file_path
         )
 
 
         # -------------------------------------------------
-        # DISPLAY STRUCTURED LAB RESULTS
+        # STRUCTURED LAB RESULTS
         # -------------------------------------------------
 
         st.markdown(
@@ -524,10 +584,6 @@ Structured laboratory values detected from the uploaded report.
                 hide_index=True
             )
 
-
-            # ---------------------------------------------
-            # SUMMARY METRICS
-            # ---------------------------------------------
 
             total_results = len(
                 lab_dataframe
@@ -592,10 +648,6 @@ Structured laboratory values detected from the uploaded report.
             )
 
 
-        # -------------------------------------------------
-        # EXTRACTED REPORT TEXT
-        # -------------------------------------------------
-
         with st.expander(
             "🔍 View Extracted Report Text"
         ):
@@ -606,7 +658,7 @@ Structured laboratory values detected from the uploaded report.
 
 
         # =================================================
-        # AI QUESTION ANSWERING SECTION
+        # AI QUESTION ANSWERING
         # =================================================
 
         st.markdown(
@@ -644,10 +696,6 @@ an answer.
             width="stretch",
         )
 
-
-        # -------------------------------------------------
-        # RUN ISOLATED RAG + QA PIPELINE
-        # -------------------------------------------------
 
         if ask_button:
 
@@ -697,11 +745,6 @@ an answer.
                                 []
                             )
 
-
-                            # ---------------------------------
-                            # DISPLAY ANSWER SAFELY
-                            # ---------------------------------
-
                             safe_answer = html.escape(
                                 answer
                             )
@@ -721,10 +764,6 @@ an answer.
                                 unsafe_allow_html=True,
                             )
 
-
-                            # ---------------------------------
-                            # SHOW RETRIEVED EVIDENCE
-                            # ---------------------------------
 
                             if retrieval_results:
 
@@ -787,6 +826,320 @@ an answer.
 
 
 # =========================================================
+# HEART DISEASE ML CLASSIFICATION DEMO
+# =========================================================
+
+st.markdown(
+    """
+<div class="ml-section">
+
+<div class="ml-title">
+🫀 Heart Disease Classification Demo
+</div>
+
+<div class="ml-description">
+Explore the machine-learning component of the Clinical Intelligence
+Assistant. This Logistic Regression model was developed using the
+UCI Heart Disease dataset and classifies the supplied feature set
+into the dataset's negative or positive heart-disease class.
+</div>
+
+<div class="ml-note">
+<strong>Important:</strong>
+This demonstration is separate from the uploaded laboratory report.
+The classifier requires the 13 features used by the UCI Heart Disease
+dataset. Its output is a model classification probability for this
+research dataset — not a diagnosis, medical risk assessment, or
+clinical recommendation.
+</div>
+
+</div>
+""",
+    unsafe_allow_html=True,
+)
+
+
+# =========================================================
+# ML INPUT FORM
+# =========================================================
+
+with st.form(
+    "heart_disease_form"
+):
+
+    input_col1, input_col2, input_col3 = st.columns(3)
+
+
+    # -----------------------------------------------------
+    # COLUMN 1
+    # -----------------------------------------------------
+
+    with input_col1:
+
+        age = st.number_input(
+            "Age",
+            min_value=1,
+            max_value=120,
+            value=50,
+            step=1,
+        )
+
+        sex = st.selectbox(
+            "Sex",
+            options=[
+                ("Female", 0),
+                ("Male", 1),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+        cp = st.selectbox(
+            "Chest Pain Type",
+            options=[
+                ("Typical angina", 1),
+                ("Atypical angina", 2),
+                ("Non-anginal pain", 3),
+                ("Asymptomatic", 4),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+        trestbps = st.number_input(
+            "Resting Blood Pressure (mm Hg)",
+            min_value=50,
+            max_value=250,
+            value=120,
+            step=1,
+        )
+
+        chol = st.number_input(
+            "Serum Cholesterol (mg/dL)",
+            min_value=50,
+            max_value=700,
+            value=200,
+            step=1,
+        )
+
+
+    # -----------------------------------------------------
+    # COLUMN 2
+    # -----------------------------------------------------
+
+    with input_col2:
+
+        fbs = st.selectbox(
+            "Fasting Blood Sugar > 120 mg/dL",
+            options=[
+                ("No", 0),
+                ("Yes", 1),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+        restecg = st.selectbox(
+            "Resting ECG",
+            options=[
+                ("Normal", 0),
+                (
+                    "ST-T wave abnormality",
+                    1,
+                ),
+                (
+                    "Left ventricular hypertrophy",
+                    2,
+                ),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+        thalach = st.number_input(
+            "Maximum Heart Rate Achieved",
+            min_value=50,
+            max_value=250,
+            value=150,
+            step=1,
+        )
+
+        exang = st.selectbox(
+            "Exercise-Induced Angina",
+            options=[
+                ("No", 0),
+                ("Yes", 1),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+
+    # -----------------------------------------------------
+    # COLUMN 3
+    # -----------------------------------------------------
+
+    with input_col3:
+
+        oldpeak = st.number_input(
+            "ST Depression (Oldpeak)",
+            min_value=0.0,
+            max_value=10.0,
+            value=1.0,
+            step=0.1,
+        )
+
+        slope = st.selectbox(
+            "Slope of Peak Exercise ST Segment",
+            options=[
+                ("Upsloping", 1),
+                ("Flat", 2),
+                ("Downsloping", 3),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+        ca = st.number_input(
+            "Major Vessels Colored by Fluoroscopy",
+            min_value=0,
+            max_value=3,
+            value=0,
+            step=1,
+        )
+
+        thal = st.selectbox(
+            "Thal",
+            options=[
+                ("Normal", 3.0),
+                ("Fixed defect", 6.0),
+                ("Reversible defect", 7.0),
+            ],
+            format_func=lambda option: option[0],
+        )
+
+
+    classify_button = st.form_submit_button(
+        "🧠 Run ML Classification",
+        type="primary",
+        width="stretch",
+    )
+
+
+# =========================================================
+# ML PREDICTION
+# =========================================================
+
+if classify_button:
+
+    patient_data = {
+        "age": age,
+        "trestbps": trestbps,
+        "chol": chol,
+        "thalach": thalach,
+        "oldpeak": oldpeak,
+        "ca": ca,
+        "sex": sex[1],
+        "cp": cp[1],
+        "fbs": fbs[1],
+        "restecg": restecg[1],
+        "exang": exang[1],
+        "slope": slope[1],
+        "thal": thal[1],
+    }
+
+    try:
+
+        with st.spinner(
+            "Running machine-learning classification..."
+        ):
+
+            ml_model = load_ml_model()
+
+            prediction = predict_heart_disease(
+                ml_model,
+                patient_data,
+            )
+
+
+        predicted_class = prediction[
+            "predicted_class"
+        ]
+
+        probability = prediction[
+            "probability"
+        ]
+
+        probability_percent = (
+            probability * 100
+        )
+
+
+        if predicted_class == 1:
+
+            class_label = (
+                "Positive class (1)"
+            )
+
+        else:
+
+            class_label = (
+                "Negative class (0)"
+            )
+
+
+        result_col1, result_col2 = st.columns(2)
+
+
+        with result_col1:
+
+            st.metric(
+                "Model Classification",
+                class_label,
+            )
+
+
+        with result_col2:
+
+            st.metric(
+                "Positive-Class Probability",
+                f"{probability_percent:.1f}%",
+            )
+
+
+        st.markdown(
+            f"""
+<div class="prediction-card">
+
+<div class="prediction-title">
+Machine-Learning Result
+</div>
+
+<div class="prediction-text">
+The Logistic Regression model classified this feature set as
+<strong>{class_label}</strong>.
+
+The model assigned a
+<strong>{probability_percent:.1f}%</strong>
+probability to the positive class.
+
+<br><br>
+
+This probability reflects the behavior of the trained research
+model on UCI Heart Disease-style features. It should not be
+interpreted as an individual's medical risk or diagnosis.
+
+</div>
+
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+
+    except Exception as ml_error:
+
+        st.error(
+            "The machine-learning classifier could not "
+            f"complete the request: {ml_error}"
+        )
+
+
+# =========================================================
 # FEATURE CARDS
 # =========================================================
 
@@ -825,16 +1178,16 @@ with col2:
 <div class="info-card">
 
 <div class="card-icon">
-📊
+🧠
 </div>
 
 <div class="card-title">
-Lab Value Analysis
+Machine Learning
 </div>
 
 <div class="card-text">
-Review laboratory values, reference ranges,
-and automatically detected result status.
+Explore a Logistic Regression classifier built using
+the UCI Heart Disease dataset.
 </div>
 
 </div>
@@ -854,7 +1207,7 @@ with col3:
 </div>
 
 <div class="card-title">
-Ask Questions
+RAG Question Answering
 </div>
 
 <div class="card-text">
@@ -879,7 +1232,7 @@ with col4:
 </div>
 
 <div class="card-title">
-Grounded Answers
+Grounded Evidence
 </div>
 
 <div class="card-text">
