@@ -1,0 +1,35 @@
+CLINICAL LABORATORY REPORT
+
+Patient Name: Sample Patient
+Patient ID: TEST-001
+Date of Birth: 01/15/1985
+Report Date: 10/08/2026
+
+COMPLETE BLOOD COUNT
+
+Hemoglobin: 13.2 g/dL
+Reference Range: 12.0 - 16.0 g/dL
+
+White Blood Cell Count: 7.4 x10^3/uL
+Reference Range: 4.0 - 11.0 x10^3/uL
+
+Platelet Count: 245 x10^3/uL
+Reference Range: 150 - 450 x10^3/uL
+
+BASIC METABOLIC PANEL
+
+Glucose: 108 mg/dL
+Reference Range: 70 - 99 mg/dL
+
+Creatinine: 0.9 mg/dL
+Reference Range: 0.6 - 1.2 mg/dL
+
+Sodium: 140 mmol/L
+Reference Range: 135 - 145 mmol/L
+
+Potassium: 4.2 mmol/L
+Reference Range: 3.5 - 5.1 mmol/L
+
+END OF REPORT
+
+This is a fictional laboratory report created only for software testing and educational purposes.
