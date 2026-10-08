@@ -1,11 +1,9 @@
+streamlit==1.65.0
 pandas
 numpy
 scikit-learn
-matplotlib
-jupyter
-ucimlrepo
 pymupdf
-sentence-transformers
-faiss-cpu
-transformers
-streamlit
+sentence-transformers==6.1.0
+faiss-cpu==1.15.1
+transformers==5.19.0
+torch==2.14.1
