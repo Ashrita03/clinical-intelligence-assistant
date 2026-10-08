@@ -1,4 +1,8 @@
+import html
+import json
 import os
+import subprocess
+import sys
 import tempfile
 
 import streamlit as st
@@ -19,14 +23,69 @@ st.set_page_config(
 
 
 # =========================================================
+# AI SUBPROCESS PIPELINE
+# =========================================================
+
+def run_ai_pipeline(report_text, question):
+    """
+    Run the complete RAG + QA pipeline in an isolated process.
+
+    The Streamlit application does not load the embedding model
+    or FLAN-T5 directly. The AI worker handles those models in
+    separate child processes.
+    """
+
+    request_data = {
+        "report_text": report_text,
+        "question": question,
+    }
+
+    process = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.ai_worker",
+        ],
+        input=json.dumps(request_data),
+        text=True,
+        capture_output=True,
+    )
+
+    if process.returncode != 0:
+        raise RuntimeError(
+            process.stderr.strip()
+            or "AI worker failed."
+        )
+
+    output_lines = [
+        line.strip()
+        for line in process.stdout.splitlines()
+        if line.strip()
+    ]
+
+    if not output_lines:
+        raise RuntimeError(
+            "AI worker returned no output."
+        )
+
+    for line in reversed(output_lines):
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+    raise RuntimeError(
+        "AI worker did not return valid JSON."
+    )
+
+
+# =========================================================
 # CUSTOM CSS
 # =========================================================
 
 st.markdown(
     """
 <style>
-
-/* MAIN PAGE */
 
 .stApp {
     background:
@@ -54,9 +113,6 @@ st.markdown(
     padding-bottom: 3rem;
 }
 
-
-/* HIDE DEFAULT STREAMLIT ELEMENTS */
-
 #MainMenu {
     visibility: hidden;
 }
@@ -64,9 +120,6 @@ st.markdown(
 footer {
     visibility: hidden;
 }
-
-
-/* HERO */
 
 .hero {
     padding: 30px 5px 18px 5px;
@@ -100,9 +153,6 @@ footer {
     max-width: 850px;
 }
 
-
-/* FEATURE BADGES */
-
 .feature-row {
     display: flex;
     gap: 16px;
@@ -121,9 +171,6 @@ footer {
     box-shadow: 0 6px 20px rgba(38, 81, 150, 0.07);
 }
 
-
-/* SAFETY NOTICE */
-
 .safety-box {
     background: linear-gradient(
         90deg,
@@ -138,9 +185,6 @@ footer {
     font-weight: 600;
     margin: 10px 0 35px 0;
 }
-
-
-/* UPLOAD */
 
 .upload-heading {
     text-align: center;
@@ -174,15 +218,9 @@ footer {
     padding-bottom: 35px;
 }
 
-
-/* ALERTS */
-
 [data-testid="stAlert"] {
     border-radius: 14px;
 }
-
-
-/* RESULTS */
 
 .results-heading {
     color: #12265c;
@@ -198,12 +236,79 @@ footer {
 }
 
 
+/* AI QUESTION CARD */
+
+.ai-section {
+    margin-top: 38px;
+    padding: 28px;
+    border-radius: 22px;
+
+    background:
+        linear-gradient(
+            135deg,
+            rgba(255,255,255,0.94),
+            rgba(240,249,255,0.94)
+        );
+
+    border: 1px solid #d5e9ff;
+
+    box-shadow:
+        0 12px 35px
+        rgba(35, 80, 150, 0.09);
+}
+
+.ai-title {
+    color: #12265c;
+    font-size: 1.75rem;
+    font-weight: 800;
+    margin-bottom: 8px;
+}
+
+.ai-description {
+    color: #687b94;
+    line-height: 1.6;
+    margin-bottom: 4px;
+}
+
+
+/* AI ANSWER */
+
+.answer-card {
+    background:
+        linear-gradient(
+            135deg,
+            #edf9ff,
+            #f3fbff
+        );
+
+    border-left: 5px solid #20a8e8;
+    border-radius: 15px;
+    padding: 20px 22px;
+    margin-top: 20px;
+    color: #18366f;
+    font-size: 1rem;
+    line-height: 1.7;
+}
+
+.answer-label {
+    color: #10245c;
+    font-weight: 800;
+    margin-bottom: 7px;
+}
+
+
 /* FEATURE CARDS */
 
 .info-card {
     min-height: 175px;
-    background: rgba(255, 255, 255, 0.88);
-    border: 1px solid rgba(100, 150, 220, 0.14);
+
+    background:
+        rgba(255, 255, 255, 0.88);
+
+    border:
+        1px solid
+        rgba(100, 150, 220, 0.14);
+
     border-radius: 20px;
     padding: 23px;
 
@@ -244,9 +349,6 @@ footer {
     font-size: 0.93rem;
 }
 
-
-/* FOOTER */
-
 .prototype-note {
     text-align: center;
     color: #8291a7;
@@ -254,9 +356,6 @@ footer {
     margin-top: 35px;
     padding-bottom: 10px;
 }
-
-
-/* MOBILE */
 
 @media (max-width: 800px) {
 
@@ -375,7 +474,7 @@ if uploaded_file is not None:
     try:
 
         # -------------------------------------------------
-        # SAVE UPLOADED PDF TEMPORARILY
+        # SAVE PDF TEMPORARILY
         # -------------------------------------------------
 
         with tempfile.NamedTemporaryFile(
@@ -391,7 +490,7 @@ if uploaded_file is not None:
 
 
         # -------------------------------------------------
-        # PROCESS CLINICAL REPORT
+        # EXTRACT REPORT
         # -------------------------------------------------
 
         extracted_text, lab_dataframe = process_clinical_pdf(
@@ -400,7 +499,7 @@ if uploaded_file is not None:
 
 
         # -------------------------------------------------
-        # DISPLAY LAB RESULTS
+        # DISPLAY STRUCTURED LAB RESULTS
         # -------------------------------------------------
 
         st.markdown(
@@ -421,13 +520,13 @@ Structured laboratory values detected from the uploaded report.
 
             st.dataframe(
                 lab_dataframe,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
 
 
             # ---------------------------------------------
-            # QUICK SUMMARY
+            # SUMMARY METRICS
             # ---------------------------------------------
 
             total_results = len(
@@ -485,25 +584,187 @@ Structured laboratory values detected from the uploaded report.
                 )
 
 
-            # ---------------------------------------------
-            # EXTRACTED TEXT PREVIEW
-            # ---------------------------------------------
-
-            with st.expander(
-                "🔍 View Extracted Report Text"
-            ):
-
-                st.text(
-                    extracted_text
-                )
-
-
         else:
 
             st.warning(
                 "No structured laboratory results were detected "
                 "in this PDF."
             )
+
+
+        # -------------------------------------------------
+        # EXTRACTED REPORT TEXT
+        # -------------------------------------------------
+
+        with st.expander(
+            "🔍 View Extracted Report Text"
+        ):
+
+            st.text(
+                extracted_text
+            )
+
+
+        # =================================================
+        # AI QUESTION ANSWERING SECTION
+        # =================================================
+
+        st.markdown(
+            """
+<div class="ai-section">
+
+<div class="ai-title">
+💬 Ask Your Report
+</div>
+
+<div class="ai-description">
+Ask a question about information contained in the uploaded report.
+The system retrieves relevant document evidence before generating
+an answer.
+</div>
+
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+
+        question = st.text_input(
+            "Question",
+            placeholder=(
+                "Example: What was the patient's glucose level?"
+            ),
+            key="report_question",
+        )
+
+
+        ask_button = st.button(
+            "✨ Ask Clinical AI",
+            type="primary",
+            width="stretch",
+        )
+
+
+        # -------------------------------------------------
+        # RUN ISOLATED RAG + QA PIPELINE
+        # -------------------------------------------------
+
+        if ask_button:
+
+            if not question.strip():
+
+                st.warning(
+                    "Please enter a question about the uploaded report."
+                )
+
+            elif not extracted_text.strip():
+
+                st.warning(
+                    "No text was extracted from the uploaded report."
+                )
+
+            else:
+
+                with st.spinner(
+                    "Retrieving report evidence and generating answer..."
+                ):
+
+                    try:
+
+                        result = run_ai_pipeline(
+                            extracted_text,
+                            question,
+                        )
+
+                        if not result.get("success"):
+
+                            st.error(
+                                result.get(
+                                    "error",
+                                    "The AI pipeline could not complete the request."
+                                )
+                            )
+
+                        else:
+
+                            answer = result.get(
+                                "answer",
+                                ""
+                            )
+
+                            retrieval_results = result.get(
+                                "evidence",
+                                []
+                            )
+
+
+                            # ---------------------------------
+                            # DISPLAY ANSWER SAFELY
+                            # ---------------------------------
+
+                            safe_answer = html.escape(
+                                answer
+                            )
+
+                            st.markdown(
+                                f"""
+<div class="answer-card">
+
+<div class="answer-label">
+🤖 AI Answer
+</div>
+
+{safe_answer}
+
+</div>
+""",
+                                unsafe_allow_html=True,
+                            )
+
+
+                            # ---------------------------------
+                            # SHOW RETRIEVED EVIDENCE
+                            # ---------------------------------
+
+                            if retrieval_results:
+
+                                with st.expander(
+                                    "🔎 View Retrieved Evidence"
+                                ):
+
+                                    for number, evidence in enumerate(
+                                        retrieval_results,
+                                        start=1
+                                    ):
+
+                                        score = evidence.get(
+                                            "score",
+                                            0.0
+                                        )
+
+                                        chunk = evidence.get(
+                                            "chunk",
+                                            ""
+                                        )
+
+                                        st.markdown(
+                                            f"**Evidence {number} "
+                                            f"— Similarity: "
+                                            f"{score:.3f}**"
+                                        )
+
+                                        st.write(
+                                            chunk
+                                        )
+
+                                        st.divider()
+
+                    except Exception as ai_error:
+
+                        st.error(
+                            "The AI question-answering pipeline "
+                            f"could not complete the request: {ai_error}"
+                        )
 
 
     except Exception as error:
@@ -515,7 +776,6 @@ Structured laboratory values detected from the uploaded report.
 
     finally:
 
-        # Remove temporary uploaded file
         if (
             temp_file_path is not None
             and os.path.exists(temp_file_path)

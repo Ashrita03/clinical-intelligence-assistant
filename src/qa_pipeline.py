@@ -5,11 +5,13 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 MODEL_NAME = "google/flan-t5-small"
 
+
 STOPWORDS = {
     "what", "was", "were", "is", "are", "the", "a", "an",
     "patient", "patients", "result", "results", "level", "levels",
     "value", "values", "report", "clinical", "show", "tell", "me",
-    "of", "for", "in", "from"
+    "of", "for", "in", "from",
+    "s"
 }
 
 
@@ -19,45 +21,81 @@ def load_qa_model():
     for grounded question answering.
     """
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(
+        MODEL_NAME
+    )
+
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        MODEL_NAME
+    )
 
     return tokenizer, model
 
 
 def question_supported_by_context(question, context):
     """
-    Check whether all meaningful terms from the question
+    Check whether meaningful terms from the question
     appear in the retrieved clinical context.
 
-    This is a conservative grounding safeguard designed
-    to reduce unsupported answers.
+    Possessive endings such as "patient's" are normalized
+    before tokenization so they do not create a stray "s"
+    token.
+
+    This is a conservative prototype grounding safeguard
+    designed to reduce unsupported answers.
     """
 
+    normalized_question = re.sub(
+        r"['’]s\b",
+        "",
+        question.lower()
+    )
+
     question_words = set(
-        re.findall(r"\b[a-zA-Z]+\b", question.lower())
+        re.findall(
+            r"\b[a-zA-Z]+\b",
+            normalized_question
+        )
     )
 
     context_words = set(
-        re.findall(r"\b[a-zA-Z]+\b", context.lower())
+        re.findall(
+            r"\b[a-zA-Z]+\b",
+            context.lower()
+        )
     )
 
-    meaningful_words = question_words - STOPWORDS
+    meaningful_words = (
+        question_words - STOPWORDS
+    )
 
     if not meaningful_words:
         return True
 
-    return meaningful_words.issubset(context_words)
+    return meaningful_words.issubset(
+        context_words
+    )
 
 
-def generate_grounded_answer(question, context, tokenizer, model):
+def generate_grounded_answer(
+    question,
+    context,
+    tokenizer,
+    model
+):
     """
     Generate an answer only when the retrieved context
     contains information relevant to the question.
     """
 
-    if not question_supported_by_context(question, context):
-        return "The information is not available in the provided report."
+    if not question_supported_by_context(
+        question,
+        context
+    ):
+        return (
+            "The information is not available "
+            "in the provided report."
+        )
 
     prompt = f"""
 Answer the question using only the clinical report context below.
@@ -82,13 +120,13 @@ Answer:
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=512
+        max_length=512,
     )
 
     outputs = model.generate(
         **inputs,
         max_new_tokens=100,
-        do_sample=False
+        do_sample=False,
     )
 
     answer = tokenizer.decode(
@@ -97,14 +135,18 @@ Answer:
     ).strip()
 
     if answer.upper() == "NOT FOUND":
-        return "The information is not available in the provided report."
+        return (
+            "The information is not available "
+            "in the provided report."
+        )
 
     return answer
 
 
 def build_context_from_results(retrieval_results):
     """
-    Combine retrieved RAG chunks into context for the language model.
+    Combine retrieved document chunks into one context
+    string for grounded question answering.
     """
 
     if not retrieval_results:
@@ -115,4 +157,6 @@ def build_context_from_results(retrieval_results):
         for result in retrieval_results
     ]
 
-    return "\n\n".join(context_parts)
+    return "\n\n".join(
+        context_parts
+    )
