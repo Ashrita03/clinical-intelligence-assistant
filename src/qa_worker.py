@@ -7,21 +7,28 @@ from src.qa_pipeline import (
 )
 
 
-def answer_question(question, context):
+def answer_question(
+    question,
+    context,
+    conversation_history=None,
+):
     """
-    Generate a grounded answer using FLAN-T5.
+    Generate a grounded conversational answer using the
+    Qwen2.5 1.5B model.
 
-    This worker intentionally loads ONLY the QA model.
-    The embedding model runs separately in rag_worker.py.
+    This worker intentionally loads only the QA model.
+    The embedding model runs separately in rag_worker.py
+    to keep the two model workloads isolated.
     """
 
     tokenizer, qa_model = load_qa_model()
 
     answer = generate_grounded_answer(
-        question,
-        context,
-        tokenizer,
-        qa_model,
+        question=question,
+        context=context,
+        tokenizer=tokenizer,
+        model=qa_model,
+        conversation_history=conversation_history,
     )
 
     return {
@@ -44,6 +51,11 @@ def main():
             "",
         )
 
+        conversation_history = request_data.get(
+            "conversation_history",
+            [],
+        )
+
         if not question.strip():
             raise ValueError(
                 "Question is empty."
@@ -54,9 +66,13 @@ def main():
                 "Retrieved context is empty."
             )
 
+        if not isinstance(conversation_history, list):
+            conversation_history = []
+
         result = answer_question(
-            question,
-            context,
+            question=question,
+            context=context,
+            conversation_history=conversation_history,
         )
 
         print(

@@ -11,6 +11,13 @@ from src.rag_pipeline import (
 
 
 def retrieve_evidence(report_text, question):
+    """
+    Retrieve relevant evidence from an uploaded medical report.
+
+    Short reports return all available chunks.
+    Longer reports use semantic retrieval to return up to five
+    highly relevant chunks.
+    """
 
     chunks = chunk_text(report_text)
 
@@ -36,29 +43,35 @@ def retrieve_evidence(report_text, question):
         embedding_model,
         index,
         chunks,
-        top_k=min(2, len(chunks)),
+        top_k=min(5, len(chunks)),
     )
+
+    if not retrieval_results:
+        return {
+            "success": False,
+            "error": "No relevant report evidence was retrieved.",
+        }
 
     return {
         "success": True,
         "evidence": retrieval_results,
+        "total_chunks": len(chunks),
+        "retrieved_chunks": len(retrieval_results),
     }
 
 
 def main():
-
     try:
-
         request_data = json.load(sys.stdin)
 
         report_text = request_data.get(
             "report_text",
-            ""
+            "",
         )
 
         question = request_data.get(
             "question",
-            ""
+            "",
         )
 
         if not report_text.strip():
@@ -81,7 +94,6 @@ def main():
         )
 
     except Exception as error:
-
         print(
             json.dumps(
                 {
