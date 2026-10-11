@@ -1,0 +1,13 @@
+streamlit==1.65.0
+pandas
+numpy
+scikit-learn
+pymupdf
+sentence-transformers==6.1.0
+faiss-cpu==1.15.1
+transformers==5.19.0
+torch==2.14.1
+mlx-lm==0.32.0
+mlx==0.32.3
+pytesseract==0.3.13
+Pillow==12.3.0

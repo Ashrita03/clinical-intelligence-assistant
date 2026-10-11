@@ -1,10 +1,18 @@
 import json
 import sys
 
-from src.qa_pipeline import (
-    load_qa_model,
-    generate_grounded_answer,
-)
+import platform
+
+if platform.system() == "Darwin":
+    from src.qa_pipeline import (
+        load_qa_model,
+        generate_grounded_answer,
+    )
+else:
+    from src.qa_pipeline_linux import (
+        load_qa_model,
+        generate_grounded_answer,
+    )
 
 
 def answer_question(
