@@ -32,3 +32,13 @@ uploads/
 
 # Logs
 *.log
+# Local development backups
+app_backup.py
+app_before_*.py
+src/*_backup.py
+src/*_before_*.py
+src/qa_pipeline_qwen_v1.py
+
+# Local synthetic OCR test documents
+data/sample_reports/ocr_test.*
+data/sample_reports/sample_dental_report.pdf
