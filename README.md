@@ -1,8 +1,3 @@
-python - <<'PY'
-from pathlib import Path
-
-readme = r"""# Clinical Intelligence Assistant
-
 ### AI-Powered Medical Document Understanding with OCR, RAG & Conversational AI
 
 [**Live Demo**](https://clinical-intelligence-ai.streamlit.app) | [**GitHub Repository**](https://github.com/Ashrita03/clinical-intelligence-assistant)
