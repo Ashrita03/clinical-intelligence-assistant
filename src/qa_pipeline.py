@@ -392,3 +392,16 @@ def build_context_from_results(retrieval_results):
 
     return "\n\n".join(chunks)
 
+
+# ============================================================
+# EXPLICIT LAB QUESTION SUPPORT CHECK
+# ============================================================
+
+def question_supported_by_context(question, context):
+    """
+    Check whether an explicit laboratory value can be
+    retrieved for the question.
+
+    This is not a general medical evidence validator.
+    """
+    return extract_explicit_lab_value(question, context) is not None
