@@ -1,3 +1,12 @@
+## Live Demo
+
+**Try the Clinical Intelligence Assistant:**
+https://clinical-intelligence-ai.streamlit.app
+
+The deployed application supports medical PDF and image uploads, OCR, laboratory result extraction, report classification, and report-grounded conversational questions.
+
+**Note:** This is an educational and research prototype, not a clinically validated diagnostic tool. Avoid uploading identifiable patient information.
+
 
 # Clinical Intelligence Assistant
 
