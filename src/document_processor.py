@@ -363,7 +363,32 @@ def process_medical_pdf(pdf_path):
 
     text = extract_text_from_pdf(pdf_path)
 
+    # Preserve the original text-based extraction as a fallback.
     lab_results = extract_lab_results(text)
+
+    # Use PDF layout information when available.
+    try:
+        from src.universal_extractor import (
+            extract_pdf_layout,
+            group_layout_rows,
+            extract_labs_from_rows,
+        )
+
+        layout_results = extract_labs_from_rows(
+            group_layout_rows(
+                extract_pdf_layout(pdf_path)
+            )
+        )
+
+        if layout_results:
+            lab_results = layout_results
+
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Layout extraction failed; using text fallback: %s",
+            exc,
+        )
 
     lab_dataframe = lab_results_to_dataframe(
         lab_results
