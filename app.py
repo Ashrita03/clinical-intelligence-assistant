@@ -1,3 +1,4 @@
+
 import hashlib
 import html
 import json
@@ -42,18 +43,26 @@ def run_ai_pipeline(
     report_text,
     question,
     conversation_history=None,
+    lab_results=None,
 ):
     """
     Run the RAG + QA pipeline in an isolated process.
+
+    Structured laboratory results are passed to the worker
+    so reference-range questions can use extracted values.
     """
 
     if conversation_history is None:
         conversation_history = []
 
+    if lab_results is None:
+        lab_results = []
+
     request_data = {
         "report_text": report_text,
         "question": question,
         "conversation_history": conversation_history,
+        "lab_results": lab_results,
     }
 
     process = subprocess.run(
@@ -538,7 +547,6 @@ consultation, or discharge report.
     unsafe_allow_html=True,
 )
 
-
 uploaded_file = st.file_uploader(
     "Upload medical report (PDF, JPG, or PNG)",
     type=["pdf", "jpg", "jpeg", "png"],
@@ -576,10 +584,7 @@ if uploaded_file is not None:
             suffix=".pdf",
         ) as temp_file:
 
-            temp_file.write(
-                file_bytes
-            )
-
+            temp_file.write(file_bytes)
             temp_file_path = temp_file.name
 
         # Convert image uploads into PDFs for OCR processing.
@@ -604,10 +609,15 @@ if uploaded_file is not None:
         metadata = report["metadata"]
         lab_dataframe = report["lab_dataframe"]
 
+        # Convert the dashboard's structured laboratory data
+        # into JSON-compatible records for the AI worker.
+        lab_results = json.loads(
+            lab_dataframe.to_json(orient="records")
+        )
+
         report_icon = get_report_icon(
             report_type
         )
-
 
         # =================================================
         # REPORT TYPE
@@ -633,7 +643,6 @@ Detected Document Type
 """,
             unsafe_allow_html=True,
         )
-
 
         # =================================================
         # GENERAL REPORT OVERVIEW
@@ -671,7 +680,6 @@ Document-level information extracted from the uploaded report.
                 "Lab Values Detected",
                 metadata["lab_results_detected"],
             )
-
 
         # =================================================
         # ADAPTIVE LAB DASHBOARD
@@ -761,7 +769,6 @@ range printed in the document.
                 "question-answering pipeline."
             )
 
-
         # =================================================
         # EXTRACTED TEXT
         # =================================================
@@ -783,7 +790,6 @@ range printed in the document.
                     "The file may contain scanned images rather than "
                     "machine-readable text."
                 )
-
 
         # =================================================
         # CONVERSATIONAL AI
@@ -812,7 +818,6 @@ Your conversation resets automatically when you upload a different report.
 """,
             unsafe_allow_html=True,
         )
-
 
         # =================================================
         # DISPLAY EXISTING CHAT HISTORY
@@ -876,7 +881,6 @@ Your conversation resets automatically when you upload a different report.
 
                             st.divider()
 
-
         # =================================================
         # CHAT INPUT
         # =================================================
@@ -921,6 +925,7 @@ Your conversation resets automatically when you upload a different report.
                                 report_text=extracted_text,
                                 question=user_question,
                                 conversation_history=conversation_history,
+                                lab_results=lab_results,
                             )
 
                             if not result.get("success"):
@@ -1007,7 +1012,6 @@ Your conversation resets automatically when you upload a different report.
                 "text was extracted from this PDF."
             )
 
-
         # =================================================
         # CHAT CONTROLS
         # =================================================
@@ -1022,13 +1026,11 @@ Your conversation resets automatically when you upload a different report.
                 st.session_state.chat_messages = []
                 st.rerun()
 
-
     except Exception as error:
 
         st.error(
             f"Unable to process the uploaded PDF: {error}"
         )
-
 
     finally:
 
