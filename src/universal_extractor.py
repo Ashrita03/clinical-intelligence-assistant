@@ -93,17 +93,29 @@ def group_layout_rows(lines, y_tolerance=5.0):
 
 
 
+
 def extract_labs_from_rows(rows):
-    """Extract measurements from rows with either value/range column order."""
+    """Extract laboratory results from variable column layouts."""
     import re
 
     number = r"-?\d+(?:\.\d+)?"
+
     value_pattern = re.compile(
         rf"^\s*({number})\s*([HL])?\s*$",
         re.IGNORECASE,
     )
-    range_pattern = re.compile(
+    value_unit_pattern = re.compile(
+        rf"^\s*({number})\s+([^\d\s][^\s]*)\s*$"
+    )
+    interval_pattern = re.compile(
         rf"^\s*({number})\s*[-–]\s*({number})\s*$"
+    )
+    upper_pattern = re.compile(
+        rf"^\s*(?:up\s*to|<=|≤|<)\s*({number})\s*$",
+        re.IGNORECASE,
+    )
+    lower_pattern = re.compile(
+        rf"^\s*(?:>=|≥|>)\s*({number})\s*$"
     )
 
     results = []
@@ -118,57 +130,94 @@ def extract_labs_from_rows(rows):
         if len(cells) < 3:
             continue
 
-        for index in range(1, len(cells) - 1):
-            first = cells[index]
-            second = cells[index + 1]
+        candidates = []
 
-            value_match = value_pattern.fullmatch(first)
-            range_match = range_pattern.fullmatch(second)
+        for index, cell in enumerate(cells):
+            interval = interval_pattern.fullmatch(cell)
+            upper = upper_pattern.fullmatch(cell)
+            lower = lower_pattern.fullmatch(cell)
 
-            if not (value_match and range_match):
-                range_match = range_pattern.fullmatch(first)
-                value_match = value_pattern.fullmatch(second)
+            if interval:
+                candidates.append((
+                    index,
+                    float(interval.group(1)),
+                    float(interval.group(2)),
+                ))
+            elif upper:
+                candidates.append((index, None, float(upper.group(1))))
+            elif lower:
+                candidates.append((index, float(lower.group(1)), None))
 
-            if not (value_match and range_match):
+        for range_index, low, high in candidates:
+            if low is not None and high is not None and low > high:
                 continue
 
-            name = cells[index - 1]
+            for value_index in range(1, len(cells)):
+                if value_index == range_index:
+                    continue
 
-            if not re.search(r"[A-Za-z]", name):
+                match = value_pattern.fullmatch(cells[value_index])
+                combined = value_unit_pattern.fullmatch(cells[value_index])
+
+                if match:
+                    value = float(match.group(1))
+                    flag = (match.group(2) or "").upper()
+                    embedded_unit = ""
+                elif combined:
+                    value = float(combined.group(1))
+                    flag = ""
+                    embedded_unit = combined.group(2)
+                else:
+                    continue
+
+                name = cells[0]
+                if not re.search(r"[A-Za-z]", name):
+                    continue
+
+                unit = embedded_unit
+
+                if not unit:
+                    for unit_index in range(1, len(cells)):
+                        if unit_index in (value_index, range_index):
+                            continue
+                        candidate = cells[unit_index]
+                        if (
+                            re.fullmatch(r"[^\d\s]+", candidate)
+                            and candidate.upper() not in ("H", "L")
+                        ):
+                            unit = candidate
+                            break
+
+                status = "Normal"
+                if low is not None and value < low:
+                    status = "Low"
+                elif high is not None and value > high:
+                    status = "High"
+
+                reported_status = {
+                    "H": "High",
+                    "L": "Low",
+                }.get(flag)
+
+                results.append({
+                    "test_name": name,
+                    "value": value,
+                    "unit": unit,
+                    "reference_low": low,
+                    "reference_high": high,
+                    "status": status,
+                    "reported_status": reported_status,
+                    "page": row["page"],
+                    "source_text": " | ".join(cells),
+                    "needs_review": (
+                        reported_status is not None
+                        and reported_status != status
+                    ),
+                })
+                break
+
+            else:
                 continue
-
-            value = float(value_match.group(1))
-            low = float(range_match.group(1))
-            high = float(range_match.group(2))
-
-            if low > high:
-                continue
-
-            flag = (value_match.group(2) or "").upper()
-            status = (
-                "Low" if value < low else
-                "High" if value > high else
-                "Normal"
-            )
-            reported_status = {"H": "High", "L": "Low"}.get(flag)
-
-            unit = cells[index + 2] if index + 2 < len(cells) else ""
-
-            results.append({
-                "test_name": name,
-                "value": value,
-                "unit": unit,
-                "reference_low": low,
-                "reference_high": high,
-                "status": status,
-                "reported_status": reported_status,
-                "page": row["page"],
-                "source_text": " | ".join(cells),
-                "needs_review": (
-                    reported_status is not None
-                    and reported_status != status
-                ),
-            })
             break
 
     return results
