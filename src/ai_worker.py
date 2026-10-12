@@ -574,6 +574,7 @@ def answer_question(
     report_text,
     question,
     conversation_history=None,
+    lab_results=None,
 ):
     """
     Run FAISS retrieval and Qwen question answering
@@ -585,6 +586,21 @@ def answer_question(
 
     if conversation_history is None:
         conversation_history = []
+
+    if lab_results is None:
+        lab_results = []
+
+    abnormal_answer = build_abnormal_lab_answer(
+        question,
+        lab_results,
+    )
+
+    if abnormal_answer is not None:
+        return {
+            "success": True,
+            "answer": abnormal_answer,
+            "evidence": [],
+        }
 
     rag_result = run_worker(
         "src.rag_worker",
@@ -728,10 +744,16 @@ def main():
         if not isinstance(conversation_history, list):
             conversation_history = []
 
+        lab_results = request_data.get("lab_results", [])
+
+        if not isinstance(lab_results, list):
+            lab_results = []
+
         result = answer_question(
             report_text=report_text,
             question=question,
             conversation_history=conversation_history,
+            lab_results=lab_results,
         )
 
         print(json.dumps(result))
@@ -745,6 +767,55 @@ def main():
                 }
             )
         )
+
+
+
+
+
+def build_abnormal_lab_answer(question, lab_results):
+    """Answer out-of-range questions using structured laboratory data."""
+    if not isinstance(question, str) or not isinstance(lab_results, list):
+        return None
+
+    question_lower = question.lower()
+
+    asks_about_abnormal = any(
+        phrase in question_lower
+        for phrase in (
+            "outside the",
+            "out of range",
+            "out-of-range",
+            "abnormal",
+            "which results are high",
+            "which results are low",
+            "above the reference",
+            "below the reference",
+        )
+    )
+
+    if not asks_about_abnormal:
+        return None
+
+    abnormal = [
+        lab for lab in lab_results
+        if isinstance(lab, dict)
+        and str(lab.get("status", "")).lower() in ("high", "low")
+    ]
+
+    if not abnormal:
+        return "No out-of-range measurements were identified in the extracted laboratory results."
+
+    lines = ["According to the extracted laboratory results:"]
+
+    for lab in abnormal:
+        lines.append(
+            f"- {lab['test_name']}: {lab['value']} "
+            f"{lab.get('unit', '')} — {lab['status']} "
+            f"(reference range: {lab.get('reference_low', 'N/A')}–"
+            f"{lab.get('reference_high', 'N/A')})"
+        )
+
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
