@@ -183,10 +183,13 @@ def question_mentions_lab(question, test_name):
     )
 
 
-def get_relevant_lab_facts(report_text, question):
+def get_relevant_lab_facts(report_text, question, lab_results=None):
     """Find explicitly documented lab tests relevant to the question."""
 
-    lab_facts = extract_structured_lab_facts(report_text)
+    lab_facts = (
+        lab_results if lab_results is not None
+        else extract_structured_lab_facts(report_text)
+    )
 
     return [
         fact
@@ -195,12 +198,13 @@ def get_relevant_lab_facts(report_text, question):
     ]
 
 
-def build_deterministic_lab_section(report_text, question):
+def build_deterministic_lab_section(report_text, question, lab_results=None):
     """Build laboratory facts directly from report measurements."""
 
     relevant_facts = get_relevant_lab_facts(
         report_text,
         question,
+        lab_results=lab_results,
     )
 
     if not relevant_facts:
@@ -302,7 +306,7 @@ def asks_for_general_management(question):
     )
 
 
-def build_safe_lab_answer(report_text, question):
+def build_safe_lab_answer(report_text, question, lab_results=None):
     """
     Build a conservative answer from documented laboratory facts.
 
@@ -317,6 +321,7 @@ def build_safe_lab_answer(report_text, question):
     relevant_facts = get_relevant_lab_facts(
         report_text,
         question,
+        lab_results=lab_results,
     )
 
     if not relevant_facts:
@@ -325,6 +330,7 @@ def build_safe_lab_answer(report_text, question):
     lab_section = build_deterministic_lab_section(
         report_text,
         question,
+        lab_results=lab_results,
     )
 
     general_points = []
@@ -539,6 +545,7 @@ def combine_grounded_answer(
     report_text,
     question,
     generated_answer,
+    lab_results=None,
 ):
     """
     Prefer deterministic answers when supported.
@@ -558,6 +565,7 @@ def combine_grounded_answer(
     lab_answer = build_safe_lab_answer(
         report_text,
         question,
+        lab_results=lab_results,
     )
 
     if lab_answer:
@@ -665,6 +673,7 @@ def answer_question(
         deterministic_answer = build_safe_lab_answer(
             report_text,
             question,
+            lab_results=lab_results,
         )
 
     if deterministic_answer:
@@ -708,6 +717,7 @@ def answer_question(
         report_text,
         question,
         cleaned_answer,
+        lab_results=lab_results,
     )
 
     grounded_answer = clean_generated_answer(
