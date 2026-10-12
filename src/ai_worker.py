@@ -590,6 +590,18 @@ def answer_question(
     if lab_results is None:
         lab_results = []
 
+    monocyte_answer = build_monocyte_explanation(
+        question,
+        lab_results,
+    )
+
+    if monocyte_answer is not None:
+        return {
+            "success": True,
+            "answer": monocyte_answer,
+            "evidence": [],
+        }
+
     abnormal_answer = build_abnormal_lab_answer(
         question,
         lab_results,
@@ -770,6 +782,77 @@ def main():
 
 
 
+
+
+
+def build_monocyte_explanation(question, lab_results):
+    """Explain monocyte percentage using verified structured lab data."""
+    import re
+
+    if not isinstance(question, str) or not isinstance(lab_results, list):
+        return None
+
+    q = question.lower()
+
+    if not re.search(r"\bmo\s*%\b|\bmonocytes?\b", q.replace("mo%", "monocytes")):
+        return None
+
+    if not any(
+        word in q
+        for word in ("mean", "explain", "cause", "why", "indicate", "high", "low")
+    ):
+        return None
+
+    matches = [
+        item for item in lab_results
+        if isinstance(item, dict)
+        and str(item.get("test_name", "")).strip().lower()
+        in ("mo%", "monocyte %", "monocytes %", "monocyte percentage")
+    ]
+
+    if len(matches) != 1:
+        return None
+
+    lab = matches[0]
+    value = lab.get("value")
+    unit = lab.get("unit", "%")
+    status = str(lab.get("status", "")).strip().lower()
+    low = lab.get("reference_low")
+    high = lab.get("reference_high")
+
+    if status not in ("high", "low", "normal"):
+        return None
+
+    answer = (
+        f"MO% means monocyte percentage, not Mean Corpuscular Volume (MCV). "
+        f"Your extracted report shows MO% = {value} {unit} "
+        f"(reference range: {low}–{high}), marked {status}. "
+        "Monocytes are a type of white blood cell involved in immune responses. "
+    )
+
+    if status == "high":
+        answer += (
+            "An elevated monocyte percentage may occur with infections, "
+            "inflammation, or recovery from an illness. "
+        )
+    elif status == "low":
+        answer += (
+            "A low monocyte percentage can have several causes and needs "
+            "interpretation alongside other blood counts. "
+        )
+    else:
+        answer += (
+            "This result is marked within the laboratory's reference range. "
+        )
+
+    answer += (
+        "The absolute monocyte count and the rest of the CBC are important "
+        "for interpretation. This result alone cannot establish a diagnosis. "
+        "A healthcare professional can interpret it alongside symptoms "
+        "and medical history."
+    )
+
+    return answer
 
 
 def build_abnormal_lab_answer(question, lab_results):
