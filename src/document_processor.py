@@ -381,7 +381,27 @@ def process_medical_pdf(pdf_path):
         )
 
         if layout_results:
-            lab_results = layout_results
+            # Preserve measurements from both extraction methods.
+            # Deduplicate identical measurements, not test names alone.
+            seen = {
+                (
+                    str(item.get("test_name", "")).strip().casefold(),
+                    str(item.get("value", "")),
+                    str(item.get("unit", "")).strip().casefold(),
+                )
+                for item in lab_results
+            }
+
+            for item in layout_results:
+                key = (
+                    str(item.get("test_name", "")).strip().casefold(),
+                    str(item.get("value", "")),
+                    str(item.get("unit", "")).strip().casefold(),
+                )
+
+                if key not in seen:
+                    lab_results.append(item)
+                    seen.add(key)
 
     except Exception as exc:
         import logging
