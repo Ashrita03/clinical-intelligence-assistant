@@ -77,3 +77,67 @@ def test_value_and_unit_in_same_cell():
     assert len(results) == 1
     assert results[0]["value"] == 8.4
     assert results[0]["unit"] == "mg/dL"
+
+
+def test_detect_potentially_missed_measurements():
+    from src.universal_extractor import assess_extraction_quality
+
+    rows = [
+        make_row("Glucose", "108", "70-99", "mg/dL"),
+        make_row("Vitamin B12", "425", "pg/mL"),
+        make_row("Patient ID", "123456"),
+        make_row("Report Date", "2026-10-12"),
+    ]
+
+    extracted = extract_labs_from_rows(rows)
+    assessment = assess_extraction_quality(rows, extracted)
+
+    assert assessment["extracted_count"] == 2
+    assert assessment["potentially_missed_count"] == 0
+    assert assessment["potentially_missed_rows"] == []
+    assert any(
+        result["test_name"] == "Vitamin B12"
+        and result["value"] == 425
+        and result["status"] == "Not assessed"
+        for result in extracted
+    )
+
+
+def test_hba1c_without_numeric_reference_range():
+    results = extract_labs_from_rows([
+        make_row(
+            "HBA1c RESULT",
+            "6.2",
+            "%",
+            "Normal Glucose tolerance",
+            "HPLC",
+        )
+    ])
+
+    assert len(results) == 1
+    assert results[0]["test_name"] == "HBA1c RESULT"
+    assert results[0]["value"] == 6.2
+    assert results[0]["unit"] == "%"
+    assert results[0]["reference_low"] is None
+    assert results[0]["reference_high"] is None
+    assert results[0]["status"] == "Not assessed"
+
+
+def test_estimated_average_glucose_without_reference_range():
+    results = extract_labs_from_rows([
+        make_row("ESTIMATED AVG. GLUCOSE", "131", "mg/dl")
+    ])
+
+    assert len(results) == 1
+    assert results[0]["value"] == 131
+    assert results[0]["unit"] == "mg/dl"
+    assert results[0]["status"] == "Not assessed"
+
+
+def test_administrative_identifiers_are_not_lab_results():
+    results = extract_labs_from_rows([
+        make_row("Patient ID", "123456", "ID"),
+        make_row("Report Date", "2026-10-12", "Date"),
+    ])
+
+    assert results == []

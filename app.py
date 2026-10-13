@@ -735,7 +735,7 @@ range printed in the document.
             )
 
             abnormal_dataframe = lab_dataframe[
-                lab_dataframe["status"] != "Normal"
+                lab_dataframe["status"].isin(["High", "Low"])
             ]
 
             if not abnormal_dataframe.empty:
@@ -767,6 +767,48 @@ range printed in the document.
                 f"in this {report_type.lower()}. The complete extracted "
                 "report text is still available to the conversational "
                 "question-answering pipeline."
+            )
+
+        # =================================================
+        # EXTRACTION QUALITY REVIEW
+        # =================================================
+
+        extraction_quality = report.get("extraction_quality", {})
+
+        if not extraction_quality.get("assessment_available", False):
+            st.info(
+                "Extraction completeness could not be assessed. "
+                "Review the original report for potentially missing measurements."
+            )
+
+        elif extraction_quality.get("requires_review", False):
+            missed_count = extraction_quality.get(
+                "potentially_missed_count", 0
+            )
+
+            st.warning(
+                f"Potentially incomplete extraction: {missed_count} "
+                "measurement-like row(s) could not be reliably extracted. "
+                "Review these entries against the original report."
+            )
+
+            with st.expander("Review potentially missed measurements"):
+                for item in extraction_quality.get(
+                    "potentially_missed_rows", []
+                ):
+                    st.markdown(
+                        f"**{item.get('test_name', 'Unknown measurement')}**"
+                    )
+                    st.code(item.get("source_text", ""))
+                    st.caption(
+                        f"Page: {item.get('page', 'Unknown')}"
+                    )
+
+        else:
+            st.caption(
+                "No additional measurement-like rows were flagged "
+                "by the extraction-quality checker. This does not "
+                "guarantee that every measurement was extracted."
             )
 
         # =================================================

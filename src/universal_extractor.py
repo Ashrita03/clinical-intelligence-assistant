@@ -220,4 +220,177 @@ def extract_labs_from_rows(rows):
                 continue
             break
 
+    # Second pass: measurements with a numeric value and unit
+    # but without a numerical reference range.
+    # Require a separate unit or a value-unit combination to
+    # reduce confusion with dates and administrative identifiers.
+    excluded_names = re.compile(
+        r"\b(?:patient|report|date|dob|birth|age|"
+        r"accession|specimen|collected|received|"
+        r"account|invoice|order|medical record|"
+        r"phone|address|identifier)\b",
+        re.IGNORECASE,
+    )
+
+    unit_pattern = re.compile(
+        r"^[A-Za-zµμ%][A-Za-z0-9µμ%/^.-]*$"
+    )
+
+    existing_sources = {
+        (item.get("page"), item.get("source_text"))
+        for item in results
+    }
+
+    for row in rows:
+        cells = [
+            item["text"].strip()
+            for item in row["items"]
+            if item["text"].strip()
+        ]
+
+        if len(cells) < 2:
+            continue
+
+        name = cells[0]
+        source_text = " | ".join(cells)
+
+        if (
+            not re.search(r"[A-Za-z]", name)
+            or excluded_names.search(name)
+            or (row["page"], source_text) in existing_sources
+        ):
+            continue
+
+        # Do not treat an unparsed reference-range row
+        # as a range-free measurement.
+        if any(
+            interval_pattern.fullmatch(cell)
+            or upper_pattern.fullmatch(cell)
+            or lower_pattern.fullmatch(cell)
+            for cell in cells[1:]
+        ):
+            continue
+
+        for index in range(1, len(cells)):
+            match = value_pattern.fullmatch(cells[index])
+            combined = value_unit_pattern.fullmatch(cells[index])
+
+            if combined:
+                value = float(combined.group(1))
+                unit = combined.group(2)
+                flag = ""
+            elif match and index + 1 < len(cells):
+                unit = cells[index + 1]
+                if not unit_pattern.fullmatch(unit):
+                    continue
+                value = float(match.group(1))
+                flag = (match.group(2) or "").upper()
+            else:
+                continue
+
+            results.append({
+                "test_name": name,
+                "value": value,
+                "unit": unit,
+                "reference_low": None,
+                "reference_high": None,
+                "status": "Not assessed",
+                "reported_status": {
+                    "H": "High",
+                    "L": "Low",
+                }.get(flag),
+                "page": row["page"],
+                "source_text": source_text,
+                "needs_review": True,
+            })
+            existing_sources.add((row["page"], source_text))
+            break
+
     return results
+
+
+def assess_extraction_quality(rows, extracted_results):
+    """
+    Identify measurement-like rows that may have been missed.
+
+    This is a heuristic review tool, not proof of complete extraction.
+    """
+    import re
+
+    excluded_names = re.compile(
+        r"\b(?:patient|report|date|dob|birth|age|"
+        r"accession|specimen|collected|received|"
+        r"account|invoice|order|medical record|"
+        r"phone|address|identifier)\b",
+        re.IGNORECASE,
+    )
+
+    numeric_value = re.compile(
+        r"^-?\d+(?:\.\d+)?(?:\s*[HL])?$",
+        re.IGNORECASE,
+    )
+
+    measurement_with_unit = re.compile(
+        r"^-?\d+(?:\.\d+)?\s+"
+        r"(?:[A-Za-zµμ%][A-Za-z0-9µμ%/^.-]*)$"
+    )
+
+    extracted_sources = {
+        (
+            result.get("page"),
+            result.get("source_text"),
+        )
+        for result in extracted_results
+        if result.get("source_text")
+    }
+
+    potentially_missed = []
+
+    for row in rows:
+        cells = [
+            item.get("text", "").strip()
+            for item in row.get("items", [])
+            if item.get("text", "").strip()
+        ]
+
+        if len(cells) < 2:
+            continue
+
+        name = cells[0]
+
+        if not re.search(r"[A-Za-z]", name):
+            continue
+
+        if excluded_names.search(name):
+            continue
+
+        source_text = " | ".join(cells)
+
+        if (row.get("page"), source_text) in extracted_sources:
+            continue
+
+        has_numeric_value = any(
+            numeric_value.fullmatch(cell)
+            or measurement_with_unit.fullmatch(cell)
+            for cell in cells[1:]
+        )
+
+        has_unit = any(
+            re.fullmatch(r"[A-Za-zµμ%][A-Za-z0-9µμ%/^.-]*", cell)
+            for cell in cells[1:]
+        )
+
+        if has_numeric_value and has_unit:
+            potentially_missed.append({
+                "test_name": name,
+                "page": row.get("page"),
+                "source_text": source_text,
+                "reason": "Measurement-like row not extracted",
+            })
+
+    return {
+        "extracted_count": len(extracted_results),
+        "potentially_missed_count": len(potentially_missed),
+        "potentially_missed_rows": potentially_missed,
+        "requires_review": bool(potentially_missed),
+    }

@@ -367,18 +367,24 @@ def process_medical_pdf(pdf_path):
     lab_results = extract_lab_results(text)
 
     # Use PDF layout information when available.
+    extraction_quality = {
+        "extracted_count": len(lab_results),
+        "potentially_missed_count": 0,
+        "potentially_missed_rows": [],
+        "requires_review": False,
+        "assessment_available": False,
+    }
+
     try:
         from src.universal_extractor import (
             extract_pdf_layout,
             group_layout_rows,
             extract_labs_from_rows,
+            assess_extraction_quality,
         )
 
-        layout_results = extract_labs_from_rows(
-            group_layout_rows(
-                extract_pdf_layout(pdf_path)
-            )
-        )
+        layout_rows = group_layout_rows(extract_pdf_layout(pdf_path))
+        layout_results = extract_labs_from_rows(layout_rows)
 
         if layout_results:
             # Preserve measurements from both extraction methods.
@@ -410,6 +416,14 @@ def process_medical_pdf(pdf_path):
             exc,
         )
 
+    if "layout_rows" in locals():
+        extraction_quality = assess_extraction_quality(
+            layout_rows, lab_results
+        )
+        extraction_quality["assessment_available"] = True
+    else:
+        extraction_quality["extracted_count"] = len(lab_results)
+
     lab_dataframe = lab_results_to_dataframe(
         lab_results
     )
@@ -425,6 +439,7 @@ def process_medical_pdf(pdf_path):
         "metadata": metadata,
         "lab_results": lab_results,
         "lab_dataframe": lab_dataframe,
+        "extraction_quality": extraction_quality,
     }
 
 
